@@ -15,11 +15,13 @@ The zap2it site, at least for my area/OTA, only gives 12 hours of data.
 (Without logging in -- and I don't want to write that code!)  So this is
 designed to be run every 3/6 hours or so.  Every URL is cached, so you can go
 more often with little extra cost.
+(TODO: Log in, fetch up to a week?)
 
-Written to have only standard library dependencies.  I.e. to be a single file.
+Written to have only standard library dependencies.
 """
 
 import argparse
+import datetime
 import json
 import pathlib
 import sys
@@ -98,6 +100,11 @@ def remove_stale_cache(cache_dir, zap_time):
     p.unlink()
 
 
+def tm_parse(tm):
+  tm = tm.replace('Z', '+00:00')
+  return datetime.datetime.fromisoformat(tm)
+
+
 def main():
   cache_dir = pathlib.Path(__file__).parent.joinpath('cache')
   if not cache_dir.is_dir():
@@ -142,6 +149,73 @@ def main():
             = '%s %s' % (c_in['channelNo'], c_in['callSign'])
         ET.SubElement(c_out, 'display-name').text = c_in['channelNo']
         ET.SubElement(c_out, 'display-name').text = c_in['callSign']
+
+    for c in d['channels']:
+      print('Channel:', c['callSign'])
+      c_id = 'I%s.%s.zap2it.com' % (c['channelNo'], c['channelId'])
+      for event in c['events']:
+        print('Event:', event)
+        prog_in = event['program']
+        tm_start = tm_parse(event['startTime'])
+        tm_end = tm_parse(event['endTime'])
+        prog_out = ET.SubElement(out, 'programme')
+        prog_out.set('start', tm_start.strftime('%Y%m%d%H%M%S %z'))
+        prog_out.set('stop', tm_end.strftime('%Y%m%d%H%M%S %z'))
+        prog_out.set('channel', c_id)
+
+        for (k_in, k_out) in (
+            ('title', 'title'),
+            ('shortDesc', 'desc'),
+            ):
+          if prog_in[k_in]:
+            x = ET.SubElement(prog_out, k_out)
+            x.set('lang', 'en')
+            x.text = prog_in[k_in]
+
+        if event['rating']:
+          r = ET.SubElement(prog_out, 'rating')
+          e = ET.SubElement(r, 'value')
+          e.text = event['rating']
+
+        if 'filter-movie' in event['filter'] and prog_in['releaseYear']:
+          st = ET.SubElement(prog_out, 'sub-title')
+          st.set('lang', 'en')
+          st.text = 'Movie: ' + prog_in['releaseYear']
+        elif prog_in['episodeTitle']:
+          st = ET.SubElement(prog_out, 'sub-title')
+          st.set('lang', 'en')
+          st.text = prog_in['episodeTitle']
+
+        l = ET.SubElement(prog_out, 'length')
+        l.set('units', 'minutes')
+        l.text = event['duration']
+
+        if prog_in['season'] and prog_in['episode']:
+          s_ = prog_in['season']
+          e_ = prog_in['episode']
+          n = ET.SubElement(prog_out, 'episode-num')
+          n.set('system', 'common')
+          n.text = 'S%sE%s' % (s_, e_)
+
+          n = ET.SubElement(prog_out, 'episode-num')
+          n.set('system', 'xmltv_ns')
+          n.text = '%d.%d.' % (int(s_)-1, int(e_)-1)
+        if prog_in['id']:
+          n = ET.SubElement(prog_out, 'episode-num')
+          n.set('system', 'common')
+          n.text = '%s.%s' % (prog_in['id'][:10], prog_in['id'][10:])
+
+        if 'New' in event['flag'] and 'live' not in event['flag']:
+          ET.SubElement(prog_out, 'new')
+
+        for f in event['filter']:
+          g = ET.SubElement(prog_out, 'genre')
+          g.set('lang', 'en')
+          g.text = f[7:]
+
+        ET.dump(prog_out)
+
+    break
 
   out_path = pathlib.Path(__file__).parent.joinpath('xmltv.xml')
   with open(out_path.absolute(), 'wb') as f:
