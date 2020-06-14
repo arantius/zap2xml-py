@@ -34,7 +34,8 @@ import xml.etree.ElementTree as ET
 def get_args():
   parser = argparse.ArgumentParser(
       description='Fetch TV data from zap2it.',
-      epilog='This tool is noisy to stdout; with cron use ')
+      epilog='This tool is noisy to stdout; '
+          'with cron use chronic from moreutils.')
   parser.add_argument(
       '--aid', dest='zap_aid', type=str, default='gapzap',
       help='Raw zap2it input parameter.  (Affiliate ID?)')
