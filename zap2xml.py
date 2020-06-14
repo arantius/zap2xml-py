@@ -105,6 +105,12 @@ def tm_parse(tm):
   return datetime.datetime.fromisoformat(tm)
 
 
+def sub_el(parent, name, text=None, **kwargs):
+  el = ET.SubElement(parent, name, **kwargs)
+  if text: el.text = text
+  return el
+
+
 def main():
   cache_dir = pathlib.Path(__file__).parent.joinpath('cache')
   if not cache_dir.is_dir():
@@ -117,7 +123,7 @@ def main():
   # Start time parameter is now rounded down to nearest `zap_timespan`, in s.
   zap_time = time.time()
   zap_time_window = args.zap_timespan * 3600
-  zap_time = int(zap_time - (zap_time % zap_time_window)) + zap_time_window
+  zap_time = int(zap_time - (zap_time % zap_time_window))
 
   remove_stale_cache(cache_dir, zap_time)
 
@@ -142,80 +148,64 @@ def main():
     if not done_channels:
       done_channels = True
       for c_in in d['channels']:
-        c_out = ET.SubElement(out, 'channel')
-        c_out.set(
-            'id', 'I%s.%s.zap2it.com' % (c_in['channelNo'], c_in['channelId']))
-        ET.SubElement(c_out, 'display-name').text \
-            = '%s %s' % (c_in['channelNo'], c_in['callSign'])
-        ET.SubElement(c_out, 'display-name').text = c_in['channelNo']
-        ET.SubElement(c_out, 'display-name').text = c_in['callSign']
+        c_out = sub_el(out, 'channel',
+            id='I%s.%s.zap2it.com' % (c_in['channelNo'], c_in['channelId']))
+        sub_el(c_out, 'display-name',
+            text='%s %s' % (c_in['channelNo'], c_in['callSign']))
+        sub_el(c_out, 'display-name', text=c_in['channelNo'])
+        sub_el(c_out, 'display-name', text=c_in['callSign'])
 
     for c in d['channels']:
-      print('Channel:', c['callSign'])
       c_id = 'I%s.%s.zap2it.com' % (c['channelNo'], c['channelId'])
       for event in c['events']:
-        print('Event:', event)
         prog_in = event['program']
         tm_start = tm_parse(event['startTime'])
         tm_end = tm_parse(event['endTime'])
-        prog_out = ET.SubElement(out, 'programme')
-        prog_out.set('start', tm_start.strftime('%Y%m%d%H%M%S %z'))
-        prog_out.set('stop', tm_end.strftime('%Y%m%d%H%M%S %z'))
-        prog_out.set('channel', c_id)
+        prog_out = sub_el(out, 'programme',
+            start=tm_start.strftime('%Y%m%d%H%M%S %z'),
+            stop=tm_end.strftime('%Y%m%d%H%M%S %z'),
+            channel=c_id)
 
         for (k_in, k_out) in (
             ('title', 'title'),
             ('shortDesc', 'desc'),
             ):
           if prog_in[k_in]:
-            x = ET.SubElement(prog_out, k_out)
-            x.set('lang', 'en')
-            x.text = prog_in[k_in]
+            sub_el(prog_out, k_out, lang='en', text=prog_in[k_in])
 
         if event['rating']:
           r = ET.SubElement(prog_out, 'rating')
-          e = ET.SubElement(r, 'value')
-          e.text = event['rating']
+          sub_el(r, 'value', text=event['rating'])
 
         if 'filter-movie' in event['filter'] and prog_in['releaseYear']:
-          st = ET.SubElement(prog_out, 'sub-title')
-          st.set('lang', 'en')
-          st.text = 'Movie: ' + prog_in['releaseYear']
+          sub_el(
+              prog_out, 'sub-title', lang='en',
+              text='Movie: ' + prog_in['releaseYear'])
         elif prog_in['episodeTitle']:
-          st = ET.SubElement(prog_out, 'sub-title')
-          st.set('lang', 'en')
-          st.text = prog_in['episodeTitle']
+          sub_el(
+              prog_out, 'sub-title', lang='en', text = prog_in['episodeTitle'])
 
-        l = ET.SubElement(prog_out, 'length')
-        l.set('units', 'minutes')
-        l.text = event['duration']
+        sub_el(prog_out, 'length', units='minutes', text=event['duration'])
 
         if prog_in['season'] and prog_in['episode']:
           s_ = prog_in['season']
           e_ = prog_in['episode']
-          n = ET.SubElement(prog_out, 'episode-num')
-          n.set('system', 'common')
-          n.text = 'S%sE%s' % (s_, e_)
-
-          n = ET.SubElement(prog_out, 'episode-num')
-          n.set('system', 'xmltv_ns')
-          n.text = '%d.%d.' % (int(s_)-1, int(e_)-1)
+          sub_el(
+              prog_out, 'episode-num', system='common',
+              text='S%sE%s' % (s_, e_))
+          sub_el(
+              prog_out, 'episode-num', system='xmltv_ns',
+              text='%d.%d.' % (int(s_)-1, int(e_)-1))
         if prog_in['id']:
-          n = ET.SubElement(prog_out, 'episode-num')
-          n.set('system', 'common')
-          n.text = '%s.%s' % (prog_in['id'][:10], prog_in['id'][10:])
+          sub_el(
+              prog_out, 'episode-num', system='dd_progid',
+              text='%s.%s' % (prog_in['id'][:10], prog_in['id'][10:]))
 
         if 'New' in event['flag'] and 'live' not in event['flag']:
-          ET.SubElement(prog_out, 'new')
+          sub_el(prog_out, 'new')
 
         for f in event['filter']:
-          g = ET.SubElement(prog_out, 'genre')
-          g.set('lang', 'en')
-          g.text = f[7:]
-
-        ET.dump(prog_out)
-
-    break
+          sub_el(prog_out, 'genre', lang='en', text=f[7:])
 
   out_path = pathlib.Path(__file__).parent.joinpath('xmltv.xml')
   with open(out_path.absolute(), 'wb') as f:
