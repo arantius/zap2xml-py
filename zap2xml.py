@@ -206,18 +206,14 @@ def main():
         sub_el(prog_out, 'length', units='minutes', text=event['duration'])
 
         if prog_in['season'] and prog_in['episode']:
-          s_ = prog_in['season']
-          e_ = prog_in['episode']
+          s_ = int(prog_in['season'], 10)
+          e_ = int(prog_in['episode'], 10)
           sub_el(
               prog_out, 'episode-num', system='common',
-              text='S%sE%s' % (s_, e_))
+              text='S%02dE%02d' % (s_, e_))
           sub_el(
               prog_out, 'episode-num', system='xmltv_ns',
               text='%d.%d.' % (int(s_)-1, int(e_)-1))
-        if prog_in['id']:
-          sub_el(
-              prog_out, 'episode-num', system='dd_progid',
-              text='%s.%s' % (prog_in['id'][:10], prog_in['id'][10:]))
 
         if 'New' in event['flag'] and 'live' not in event['flag']:
           sub_el(prog_out, 'new')
