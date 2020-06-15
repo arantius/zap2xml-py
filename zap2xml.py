@@ -78,12 +78,24 @@ def get_args():
 def get_cached(cache_dir, cache_key, delay, url):
   cache_path = cache_dir.joinpath(cache_key)
   if cache_path.is_file():
+    print('FROM CACHE:', url)
     with open(cache_path, 'rb') as f:
       return f.read()
   else:
-    print('Fetching:', url)
-    resp = urllib.request.urlopen(url)
-    result = resp.read()
+    print('Fetching:  ', url)
+    try:
+      resp = urllib.request.urlopen(url)
+      result = resp.read()
+    except urllib.error.HTTPError as e:
+      if e.code == 400:
+        print('Got a 400 error!  Ignoring it.')
+        result = (
+            b'{'
+            b'"note": "Got a 400 error at this time, skipping.",'
+            b'"channels": []'
+            b'}')
+      else:
+        raise
     with open(cache_path, 'wb') as f:
       f.write(result)
     time.sleep(delay)
@@ -122,9 +134,11 @@ def main():
   done_channels = False
   err = 0
   # Start time parameter is now rounded down to nearest `zap_timespan`, in s.
-  zap_time = time.time()
+  zap_time = time.mktime(time.localtime())
+  print('Local time:    ', zap_time)
   zap_time_window = args.zap_timespan * 3600
   zap_time = int(zap_time - (zap_time % zap_time_window))
+  print('First zap time:', zap_time)
 
   remove_stale_cache(cache_dir, zap_time)
 
@@ -137,6 +151,9 @@ def main():
   # Fetch 12 hours of data, in `zap_timespan` chunks.
   for i in range(int(12 / args.zap_timespan)):
     i_time = zap_time + (i * zap_time_window)
+    i_dt = datetime.datetime.fromtimestamp(i_time)
+    print('Getting data for', i_dt.isoformat())
+
     qs = base_qs.copy()
     qs['lineupId'] = '%s-%s-DEFAULT' % (args.zap_country, args.zap_headendId)
     qs['time'] = i_time
